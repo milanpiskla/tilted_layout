@@ -94,7 +94,7 @@ class Layout:
         line2 = TiltedLine(self.angle, xmax)
         intersections1 = list(line1.intersect_frame(self.frame))
         intersections2 = list(line2.intersect_frame(self.frame))
-        if len(intersections1) < 2 or len(intersections2) < 2:
+        if len(intersections1) == 0 and len(intersections2) == 0:
             return None
 
         board = []
