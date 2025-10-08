@@ -20,9 +20,8 @@ class TiltedLine:
     """ Represents a line tilted at a certain angle and offset from the origin"""
     def __init__(self, angle: float, offset: float):
         self.angle = angle
-        self.offset = offset
-        self.slope = math.tan(math.radians(angle))
-        self.intercept = offset / math.sin(math.radians(angle))
+        self.slope = math.tan(angle)
+        self.intercept = -self.slope * offset
 
     def intersect_frame(self, frame: Frame) -> list[Point] | None:
         for i in range(4):
@@ -62,11 +61,10 @@ class TiltedLine:
 class Layout(ABC):
     """ Calculates the layout of boards in a tilted frame"""
     def __init__(self, width, height, board_width, angle, spacing):
-        self.angle = angle
-        self.spacing = spacing
+        self.angle = math.radians(angle)
         self.frame = ((-width / 2, -height / 2), (width / 2, -height / 2), (width / 2, height / 2), (-width / 2, height / 2))
-        self.offset_step = board_width / math.sin(angle) + spacing / math.sin(angle)
-        self.board_x_half_width = board_width / math.sin(angle) / 2
+        self.offset_step = board_width / math.sin(self.angle) + spacing / math.sin(self.angle)
+        self.board_x_half_width = board_width / math.sin(self.angle) / 2
         self.boards: list[Board] = []
 
     def calculate(self) -> list[Board] | None:
@@ -147,11 +145,11 @@ class Renderer:
 
 
 if __name__ == "__main__":
-    even_layout = EvenLayout(600, 400, 140, 45, 4)
+    even_layout = EvenLayout(600, 400, 140, 22, 4)
     renderer = Renderer(even_layout.calculate())
     renderer.render("layout_even.excalidraw")
 
-    odd_layout = OddLayout(600, 400, 140, 45, 4)
+    odd_layout = OddLayout(600, 400, 140, 22, 4)
     renderer = Renderer(odd_layout.calculate())
     renderer.render("layout_odd.excalidraw")
 
