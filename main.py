@@ -1,4 +1,13 @@
+""" A utility for generating tilted board layouts and rendering them in Excalidraw
+Used for generating cutting diagrams for woodworking projects.
+
+How it works: Two tilted lines for each board intersecting a rectangular frame define the edges of a board. 
+If the frame corners are between the two lines, they are also included in the board shape.
+The board points are then sorted in clockwise order around the board center to form a polygon.
+"""
+
 from excaligen.DiagramBuilder import DiagramBuilder
+from abc import ABC, abstractmethod
 
 import math
 
@@ -50,27 +59,18 @@ class TiltedLine:
         else:
             raise ValueError("Non axis-aligned line segment is not supported")
 
-class Layout:
+class Layout(ABC):
     """ Calculates the layout of boards in a tilted frame"""
     def __init__(self, width, height, board_width, angle, spacing):
-        self.width = width
-        self.height = height
-        self.board_width = board_width
         self.angle = angle
         self.spacing = spacing
-        self.xmin = -width / 2
-        self.xmax = width / 2
-        self.ymin = -height / 2
-        self.ymax = height / 2
-        self.frame = ((self.xmin, self.ymin), (self.xmax, self.ymin), (self.xmax, self.ymax), (self.xmin, self.ymax))
+        self.frame = ((-width / 2, -height / 2), (width / 2, -height / 2), (width / 2, height / 2), (-width / 2, height / 2))
         self.offset_step = board_width / math.sin(angle) + spacing / math.sin(angle)
-        self.delta_x = width / 2 / math.tan(angle)
         self.board_x_half_width = board_width / math.sin(angle) / 2
         self.boards: list[Board] = []
 
     def calculate(self) -> list[Board] | None:
-        offset = 0
-        self.boards.append(self._try_create_board(0))
+        offset = self.setup()
         while True:
             offset += self.offset_step
             board = self._try_create_board(offset)
@@ -85,6 +85,10 @@ class Layout:
             self.boards.append(board2)
 
         return self.boards
+
+    @abstractmethod
+    def setup(self) -> float:
+        pass
 
     def _try_create_board(self, offset) -> Board | None:
         center = (offset, 0)
@@ -115,6 +119,17 @@ class Layout:
             (x, y) = point
             return math.atan2(y - cy, x - cx)
         return sorted(board, key = angle_from_center)
+    
+class EvenLayout(Layout):
+    """ Layout with even number of boards"""
+    def setup(self) -> float:
+        return -self.offset_step / 2
+    
+class OddLayout(Layout):
+    """ Layout with odd number of boards"""
+    def setup(self) -> float:
+        self.boards.append(self._try_create_board(0.0))
+        return 0.0
 
 class Renderer:
     """ Renders the layout using Excalidraw"""
@@ -126,16 +141,19 @@ class Renderer:
         for board in self.boards:
             transformed_board = [(x, -y) for (x, y) in board] # Invert Y axis for Excalidraw
 
-            xd.line().sloppiness('architect').roundness('sharp').points(transformed_board).close().color("#000000").thickness('thin')
+            xd.line().sloppiness('architect').roundness('sharp').points(transformed_board).close().color("#000000").thickness('thin').background('brown')
 
         xd.save(basename)
 
 
 if __name__ == "__main__":
-    layout = Layout(600, 400, 140, 45, 4)
-    boards = layout.calculate()
-    
-    renderer = Renderer(boards)
-    renderer.render()
-    
+    even_layout = EvenLayout(600, 400, 140, 45, 4)
+    renderer = Renderer(even_layout.calculate())
+    renderer.render("layout_even.excalidraw")
+
+    odd_layout = OddLayout(600, 400, 140, 45, 4)
+    renderer = Renderer(odd_layout.calculate())
+    renderer.render("layout_odd.excalidraw")
+
+
 
