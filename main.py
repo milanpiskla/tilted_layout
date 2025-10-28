@@ -62,12 +62,19 @@ class Layout(ABC):
     """ Calculates the layout of boards in a tilted frame"""
     def __init__(self, width, height, board_width, angle, spacing):
         self.angle = math.radians(angle)
+        self.width = width
+        self.height = height
         self.frame = ((-width / 2, -height / 2), (width / 2, -height / 2), (width / 2, height / 2), (-width / 2, height / 2))
         self.offset_step = board_width / math.sin(self.angle) + spacing / math.sin(self.angle)
         self.board_x_half_width = board_width / math.sin(self.angle) / 2
         self.boards: list[Board] = []
+        self.top_offsets: list[(float, float)] = []
+        self.bottom_offsets: list[(float, float)] = []
+        self.left_offsets: list[(float, float)] = []
+        self.right_offsets: list[(float, float)] = []
 
-    def calculate(self) -> list[Board] | None:
+    def calculate(self) -> None:
+        """ Calculate the layout of boards in the frame"""
         offset = self.setup()
         while True:
             offset += self.offset_step
@@ -82,6 +89,7 @@ class Layout(ABC):
             self.boards.append(board)
             self.boards.append(board2)
 
+        self._calculate_offsets()
         return self.boards
 
     @abstractmethod
@@ -89,6 +97,7 @@ class Layout(ABC):
         pass
 
     def _try_create_board(self, offset) -> Board | None:
+        """ Try to create a board at a given offset. Returns None if the board is out of frame"""
         center = (offset, 0)
         xmin = offset - self.board_x_half_width
         xmax = offset + self.board_x_half_width
@@ -112,12 +121,29 @@ class Layout(ABC):
         return board
 
     def _sort_board_points(self, board: Board, center: Point) -> Board:
+        """ Sort board points in clockwise order around the center point"""
         (cx, cy) = center
         def angle_from_center(point: Point) -> float:
             (x, y) = point
             return math.atan2(y - cy, x - cx)
         return sorted(board, key = angle_from_center)
-    
+
+    def _calculate_offsets(self):
+        """ Calculate offsets of borads touching the frame edges"""
+        for board in self.boards:
+            for (x, y) in board:
+                if math.isclose(y, -self.height / 2):
+                    self._append_offset(self.bottom_offsets, x, self.width / 2)
+                elif math.isclose(y, self.height / 2):
+                    self._append_offset(self.top_offsets, x, self.width / 2)
+                elif math.isclose(x, -self.width / 2):
+                    self._append_offset(self.left_offsets, y, self.height / 2)
+                elif math.isclose(x, self.width / 2):
+                    self._append_offset(self.right_offsets, y, self.height / 2)
+
+    def _append_offset(self, offsets: list[(float, float)], value: float, shift: float):
+        offsets.append((value, value + shift))
+
 class EvenLayout(Layout):
     """ Layout with even number of boards"""
     def setup(self) -> float:
@@ -134,24 +160,56 @@ class Renderer:
     def __init__(self, boards: list[Board]) -> None:
         self.boards = boards
 
-    def render(self, basename = "layout.excalidraw"):
+    def render(self, basename: str):
+        """ Render the layout to an Excalidraw file"""
         xd = DiagramBuilder()
+        xd.defaults().sloppiness('architect').roundness('sharp').thickness('thin').color("black")
         for board in self.boards:
             transformed_board = [(x, -y) for (x, y) in board] # Invert Y axis for Excalidraw
 
-            xd.line().sloppiness('architect').roundness('sharp').points(transformed_board).close().color("#000000").thickness('thin').background('brown')
+            xd.line().points(transformed_board).close().background('brown')
 
-        xd.save(basename)
+        xd.save(self._create_filename(basename))
 
+    def blueprint(self, basename: str):
+        """ Render the layout as a blueprint to an Excalidraw file"""
+        xd = DiagramBuilder()
+        xd.defaults().sloppiness('architect').roundness('sharp').thickness('thin').color("black")
+        for board in self.boards:
+            transformed_board = [(x, -y) for (x, y) in board] # Invert Y axis for Excalidraw
+            xd.line().points(transformed_board).close()
+            self._render_board_dimensions(xd, transformed_board)
+
+        xd.save(self._create_filename(basename))
+
+    def _create_filename(self, basename: str) -> str:
+        if not basename.endswith(".excalidraw"):
+            basename += ".excalidraw"
+        return basename
+    
+    def _render_board_dimensions(self, xd: DiagramBuilder, board: Board) -> None:
+        for i in range(len(board) - 1):
+            a = board[i]
+            b = board[i + 1]
+            length = math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2)
+            mid_point = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+            normal_vector = (b[1] - a[1], -(b[0] - a[0]))
+            dim_center = (mid_point[0] + normal_vector[0] * 0.1, mid_point[1] + normal_vector[1] * 0.1)
+            xd.text().content(self._format_dimension(length)).center(dim_center[0], dim_center[1]).color("blue")
+
+    def _format_dimension(self, value: float) -> str:
+        return f"{value:.1f}"
 
 if __name__ == "__main__":
-    even_layout = EvenLayout(600, 400, 140, 22, 4)
+    even_layout = EvenLayout(600, 400, 140, 45, 4)
     renderer = Renderer(even_layout.calculate())
-    renderer.render("layout_even.excalidraw")
+    renderer.render("layout_even")
+    renderer.blueprint("layout_even_blueprint")
 
-    odd_layout = OddLayout(600, 400, 140, 22, 4)
+    odd_layout = OddLayout(600, 400, 140, 45, 4)
     renderer = Renderer(odd_layout.calculate())
-    renderer.render("layout_odd.excalidraw")
+    renderer.render("layout_odd")
+    renderer.blueprint("layout_odd_blueprint")
 
 
 
