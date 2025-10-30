@@ -192,13 +192,20 @@ class Renderer:
             a = board[i]
             b = board[i + 1]
             length = math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2)
+            normal_vector = ((b[1] - a[1]) / length, -(b[0] - a[0]) / length)
             mid_point = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-            normal_vector = (b[1] - a[1], -(b[0] - a[0]))
-            dim_center = (mid_point[0] + normal_vector[0] * 0.1, mid_point[1] + normal_vector[1] * 0.1)
-            xd.text().content(self._format_dimension(length)).center(dim_center[0], dim_center[1]).color("blue")
+
+            multiplier = -1.0 if self._is_border_line(a, b) else 1.0
+            x = mid_point[0] + normal_vector[0] * multiplier * 25
+            y = mid_point[1] + normal_vector[1] * multiplier * 25
+
+            xd.text().content(self._format_dimension(length)).center(x, y).color("blue")
 
     def _format_dimension(self, value: float) -> str:
         return f"{value:.1f}"
+    
+    def _is_border_line(self, a: Point, b: Point) -> bool:
+        return (math.isclose(a[0], b[0]) or math.isclose(a[1], b[1]))
 
 if __name__ == "__main__":
     even_layout = EvenLayout(600, 400, 140, 45, 4)
