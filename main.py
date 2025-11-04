@@ -8,6 +8,7 @@ The board points are then sorted in clockwise order around the board center to f
 
 from excaligen.DiagramBuilder import DiagramBuilder
 from abc import ABC, abstractmethod
+from typing import Self
 
 import math
 
@@ -73,7 +74,7 @@ class Layout(ABC):
         self.left_offsets: list[(float, float)] = []
         self.right_offsets: list[(float, float)] = []
 
-    def calculate(self) -> None:
+    def calculate(self) -> Self:
         """ Calculate the layout of boards in the frame"""
         offset = self.setup()
         while True:
@@ -90,7 +91,7 @@ class Layout(ABC):
             self.boards.append(board2)
 
         self._calculate_offsets()
-        return self.boards
+        return self
 
     @abstractmethod
     def setup(self) -> float:
@@ -134,11 +135,11 @@ class Layout(ABC):
             for (x, y) in board:
                 if math.isclose(y, -self.height / 2):
                     self._append_offset(self.bottom_offsets, x, self.width / 2)
-                elif math.isclose(y, self.height / 2):
+                if math.isclose(y, self.height / 2):
                     self._append_offset(self.top_offsets, x, self.width / 2)
-                elif math.isclose(x, -self.width / 2):
+                if math.isclose(x, -self.width / 2):
                     self._append_offset(self.left_offsets, y, self.height / 2)
-                elif math.isclose(x, self.width / 2):
+                if math.isclose(x, self.width / 2):
                     self._append_offset(self.right_offsets, y, self.height / 2)
 
     def _append_offset(self, offsets: list[(float, float)], value: float, shift: float):
@@ -157,28 +158,30 @@ class OddLayout(Layout):
 
 class Renderer:
     """ Renders the layout using Excalidraw"""
-    def __init__(self, boards: list[Board]) -> None:
-        self.boards = boards
+    def __init__(self, layout: Layout) -> None:
+        self.layout = layout
 
     def render(self, basename: str):
         """ Render the layout to an Excalidraw file"""
         xd = DiagramBuilder()
         xd.defaults().sloppiness('architect').roundness('sharp').thickness('thin').color("black")
-        for board in self.boards:
+        for board in self.layout.boards:
             transformed_board = [(x, -y) for (x, y) in board] # Invert Y axis for Excalidraw
 
-            xd.line().points(transformed_board).close().background('brown')
+            xd.line().points(transformed_board).close().background('brown').fill('solid')
 
         xd.save(self._create_filename(basename))
 
     def blueprint(self, basename: str):
         """ Render the layout as a blueprint to an Excalidraw file"""
         xd = DiagramBuilder()
-        xd.defaults().sloppiness('architect').roundness('sharp').thickness('thin').color("black")
-        for board in self.boards:
+        xd.defaults().sloppiness('architect').roundness('sharp').thickness('thin').color("black").font('Nunito')
+        for board in self.layout.boards:
             transformed_board = [(x, -y) for (x, y) in board] # Invert Y axis for Excalidraw
             xd.line().points(transformed_board).close()
             self._render_board_dimensions(xd, transformed_board)
+
+        self._render_border_offsets(xd)
 
         xd.save(self._create_filename(basename))
 
@@ -191,7 +194,7 @@ class Renderer:
         for i in range(len(board) - 1):
             a = board[i]
             b = board[i + 1]
-            length = math.sqrt((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2)
+            length = math.hypot(b[0] - a[0], b[1] - a[1])
             normal_vector = ((b[1] - a[1]) / length, -(b[0] - a[0]) / length)
             mid_point = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
 
@@ -206,6 +209,44 @@ class Renderer:
     
     def _is_border_line(self, a: Point, b: Point) -> bool:
         return (math.isclose(a[0], b[0]) or math.isclose(a[1], b[1]))
+    
+    def _render_border_offsets(self, xd: DiagramBuilder) -> None:
+        offsets = sorted(self.layout.top_offsets)
+        increment = 0
+        for (x1, x2) in offsets:
+            y = -self.layout.height / 2 - 5
+            y1 = y - 30 - increment
+            xd.line().points([(x1, y), (x1, y1)]).color("green")
+            xd.text().content(self._format_dimension(x2)).color("green").anchor(x1 - 3, y1, 'right', 'top')
+            increment += 30
+
+        offsets = sorted(self.layout.bottom_offsets)
+        increment = 0
+        for (x1, x2) in offsets:
+            y = self.layout.height / 2 + 5
+            y1 = y + 30 + increment
+            xd.line().points([(x1, y), (x1, y1)]).color("green")
+            xd.text().content(self._format_dimension(x2)).color("green").anchor(x1 - 3, y1, 'right', 'bottom')
+            increment += 30
+
+        offsets = sorted(self.layout.left_offsets)
+        increment = 0
+        for (y1, y2) in offsets:
+            x = -self.layout.width / 2 - 5
+            x1 = x - 50 - increment
+            xd.line().points([(x, -y1), (x1, -y1)]).color("green")
+            xd.text().content(self._format_dimension(y2)).color("green").anchor(x1, -y1, 'left', 'top')
+            increment += 60
+
+        offsets = sorted(self.layout.right_offsets)
+        increment = 0
+        for (y1, y2) in offsets:
+            x = self.layout.width / 2 + 5
+            x1 = x + 50 + increment
+            xd.line().points([(x, -y1), (x1, -y1)]).color("green")
+            xd.text().content(self._format_dimension(y2)).color("green").anchor(x1, -y1, 'right', 'top')
+            increment += 60
+
 
 if __name__ == "__main__":
     even_layout = EvenLayout(600, 400, 140, 45, 4)
